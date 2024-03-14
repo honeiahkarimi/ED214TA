@@ -1,0 +1,126 @@
+---
+title: "Lab 2"
+author: "ED 214B"
+date: "Winter 2024"
+output: 
+  prettydoc::html_pretty:
+    theme: cayman
+    toc: yes
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE,
+                      out.width = "70%", fig.align = 'center')
+```
+
+## Working Directory
+
+```{r}
+setwd("~/Desktop/ED214_TA_Materials/ED214B/Lab2")
+```
+
+## Importing Libraries
+
+```{r}
+library(readxl) # import Excel document
+library(psych) # describe function
+library(summarytools) # freq function
+library(tidyverse) # ggplot and piping operator
+```
+
+## Importing Data
+
+```{r}
+df <- read_excel("week2d.xlsx")
+View(df)
+```
+
+## Research Question and Hypotheses
+
+Research question: Do people who enjoy reading tend to do better in school?
+
+Put another way: Does reading enjoyment (*enjoyread*) predict verbal test scores (*verbalscr*)?
+  
+## Data Cleaning
+
+```{r}
+describe(df$enjoyread)
+describe(df$verbalscr)
+```
+
+```{r}
+df %>% 
+  ggplot(aes(x=enjoyread))+
+  geom_histogram()+
+  theme_minimal()
+```
+
+## Recode Missing Data
+
+```{r}
+df$enjoyread[df$enjoyread==9999] <- NA
+df$verbalscr[df$verbalscr==9999] <- NA
+```
+
+## Plot the Recoded Data
+
+```{r}
+df %>% 
+  ggplot(aes(x=enjoyread))+
+  geom_histogram()+
+  theme_minimal()
+```
+
+As we can see, **enjoyread** is ordinal. We'll treat this variable as continuous in the regression model (for now). We should look at the frequency table from ```summarytools``` instead of the descriptive statistics from the ```describe``` function in the ```psych``` package.
+
+```{r}
+freq(df$enjoyread)
+```
+
+We should plot **enjoyread** as a bar graph because it is ordinal.
+
+```{r}
+df %>% 
+  ggplot(aes(x=enjoyread))+
+  geom_bar()+
+  theme_minimal()
+
+df %>% 
+  ggplot(aes(x=verbalscr))+
+  geom_histogram()+
+  theme_minimal()
+```
+
+## Plot Relationship
+
+```{r}
+df %>% 
+  ggplot(aes(x=enjoyread,y=verbalscr))+
+  geom_point()+
+  theme_minimal()
+```
+
+## Simple Linear Regression
+
+```{r}
+mod_read <- lm(verbalscr~enjoyread,data=df)
+summary(mod_read)
+confint(mod_read)
+```
+
+### Model Summaries
+
+- enjoyread
+  - $\hat{y} = \beta_0 + \beta_1*enjoyread$
+  - $\hat{y} = 20.76 + 2.78*enjoyread$
+  - $R^2 = .58$
+  - 95% CI for enjoyread: (2.69, 2.86)
+    - *Doesn't contain 0*
+
+### Residual Standard Error (RSE)
+
+- Smaller residuals mean the predictions were better.
+- RSE is considered a measure of the lack of fit of the model.
+- Our RSE is about 2.09. This means that the actual verbal test score deviates from the true regression line by about 2.09 points on average.
+
+

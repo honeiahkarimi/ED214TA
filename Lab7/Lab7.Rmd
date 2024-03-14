@@ -1,0 +1,288 @@
+---
+title: 'Lab 7: Transformations and Base R'
+author: "ED 214B"
+date: "Winter 2024"
+output: 
+  prettydoc::html_pretty:
+    theme: architect
+    toc: yes
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE,
+                      message = FALSE,
+                      warning = FALSE,
+                      fig.align = 'center',
+                      out.width='60%')
+
+setwd("~/Desktop/ED214_TA_Materials/ED214B/Lab7")
+```
+
+```{r}
+library(readr) # importing csv
+library(gridExtra) # grid.arrange
+library(kableExtra) # makes pretty tables
+library(psych) # describe
+library(tidyverse) # ggplot
+```
+
+## Transformations
+
+One of the most important assumptions of linear regression is that there is a linear relationship between the predictor variable and the outcome variable.  If the relationship is not linear, our parameter estimates will not accurately characterize the relationship between X and Y, and our $R^2$ will be lower.
+
+One of the first things we should always do is to check if the relationship between X and Y is linear (assuming both variables are continuous - remember that the graph will look pretty meaningless if the predictor is categorical).  To do this, we can just create a simple scatterplot using `ggplot`.
+
+Let's begin by reading in the data for this week:
+
+```{r}
+df <- read_csv("Lab7.csv")
+View(df)
+```
+
+**Research question**: What is the relationship between age and weight?
+
+First, let's graph the relationship to see if it's linear.
+
+```{r}
+df %>% 
+  ggplot(aes(x=Age,y=Weight))+
+  geom_point()
+```
+
+The assumption of linearity has been violated.  Therefore, we **cannot** use a (simple or multiple) linear regression model.
+
+Next, let's look at a graph of the univariate statistics of the predictor and outcome variables.  What should we use?  What can we conclude after looking at the variable?
+
+```{r}
+describe(df$Age)
+describe(df$Weight)
+```
+
+Let's quickly plot histograms for each of these variables using a simple function from base R (instead of `ggplot`).
+
+```{r}
+hist(df$Age)
+hist(df$Weight)
+```
+
+If we wanted to use ggplot, it would look like this:
+
+```{r eval=FALSE}
+df %>% ggplot(aes(x=Age))+
+  geom_histogram()
+
+df %>% ggplot(aes(x=Weight))+
+  geom_histogram()
+```
+
+## Rationale for Transformations  
+
+Data transformations may be a remedy for violations of model assumptions. When we transform data, we are applying a mathematical modification to all values of a variable. Transforming helps reduce Type I and Type II errors (and improve model fit), but our results may become more difficult to interpret.
+
+We may need to try different transformations to see which produces the distribution that will meet assumptions. Typically, we try to use the same transformations for all variables in the model. We also **avoid transforming the outcome variable if possible** because if we have more than one predictor in our model, we are changing the relationship the outcome variable has with all predictors once we transform it.
+
+\  
+
+## What are some popular transformations?
+
+```{r echo=FALSE}
+tab <- data.frame(c("Linear","Logarithmic",
+                    "Inverse","Quadratic",
+                    "Cubic","Quartic",
+                    "Growth","Exponential"),
+                  c("$y=\\beta_0+\\beta_1*x$","$y=\\beta_0+\\beta_1*log(x)$",
+                    "$y=\\beta_0+\\beta_1/x$","$y=\\beta_0+\\beta_1*x+\\beta_1*x^2$",
+                    "$y=\\beta_0+\\beta_1*x+\\beta_1*x^{2}+\\beta_1*x^{3}$","$y=\\beta_0+\\beta_1*x+\\beta_1*x^2+\\beta_1*x^3+\\beta_1*x^4$",
+                    "$y=e^{\\beta_0+\\beta_1*x}$","$y=\\beta_0+e^{\\beta_1*x}$")
+  
+  
+  
+)
+
+kable(tab,escape=FALSE,col.names = c("Model","Equation"),booktabs=T)
+```
+
+*Note that logarithmic transformations and exponential transformations are the inverse of each other*
+
+$$\log_aX = y$$
+
+*log base a of X is y*
+
+$$x = a^y $$
+
+...where a is either base e, 2, or 10.
+
+## Example 1 
+
+**Research question**: What is the relationship between age and weight?
+
+Revisiting our model...  Let's transform the x-variable using an exponential equation, and re-graph it.  The goal here is to make a transformation that results in a linear relationship between X and Y.  To do this, we'll use the mutate function to create a new variable and then add it to our existing dataset.
+
+```{r}
+df <- df %>% 
+  mutate(AgeExp = exp(Age))
+```
+
+Graph the relationship again.  Let's use base R.  
+
+```{r}
+plot(df$AgeExp,df$Weight)
+```
+
+We could also do this in `ggplot`.
+
+```{r eval=FALSE}
+df %>% 
+  ggplot(aes(x=AgeExp,y=Weight))+
+  geom_point()
+```
+
+That certainly does not look anymore linear.
+
+Let's try again using a logarithmic transformation.  This time, transform the original predictor variable with a logarithmic transformation.  
+
+We start by transforming Age and adding it to our dataset:
+
+```{r}
+df <- df %>% 
+  mutate(AgeLog=log(Age))
+```
+
+Next, we plot:
+
+```{r}
+plot(df$AgeLog,df$Weight)
+```
+
+It looks nice and linear!
+
+Let's run a regression model for the linear relationship and the logarithmic relationship. How does the $R^2$ change?  
+
+**Let's start with the standard linear relationship.**
+
+```{r}
+linear <- lm(Weight~Age,data=df)
+summary(linear)
+```
+
+- The $R^2$ is .7503, which means that Age explains 75.03% of the variation in Weight.
+
+**Let's model the relationship again, this time with the logarithmic transformation of X as the predictor.**
+
+```{r}
+logreg <- lm(Weight~AgeLog,data=df)
+summary(logreg)
+```
+
+- The $R^2$ is now .9238, which means that Age explains 92.38% of the variation in Weight. Much better!
+
+Clearly, we should use the logarithmic transformation.  How can we interpret the results?
+
+- For a 1 % increase, divide the coefficient by 100
+  - A 1% increase in age corresponds to a .149 unit increase in Weight
+- For a x % increase, multiply the coefficient by log(1.x)
+    - A 10% increase in age corresponds to a .617 unit increase in Weight
+        - $14.93*log10(1.10)=.617$
+
+## Example 2
+
+**Research Question**: Does salary increase with years of experience?
+
+1. Transform the predictor variable as a quadratic, cubic, and quartic variable.
+2. Plot the relationship between **Year** and **Income** as a linear model, and with a quadratic, cubic, and quartic transformation.  
+- What does each look like?  
+- Which one should we use?
+
+```{r out.width="80%"}
+lin <- df %>% 
+  ggplot(aes(x=Year,y=Income)) + 
+  geom_point()+
+  stat_smooth(method="lm",formula = y ~ x,fill=NA)+
+  labs(title="Linear")+
+  theme_minimal()
+
+quad <- df %>% 
+  ggplot(aes(x=(Year+Year^2),y=Income)) + 
+  geom_point()+
+  stat_smooth(method="lm",formula = y ~ x + I(x^2),fill=NA)+
+  labs(title="Quadratic")+
+  theme_minimal()
+
+cube <- df %>% 
+  ggplot(aes(x=(Year+Year^2+Year^3),y=Income)) + 
+  geom_point()+
+  stat_smooth(method="lm",formula = y ~ x + I(x^2)+I(x^3),fill=NA)+
+  labs(title="Cubic")+
+  theme_minimal()
+
+quar <- df %>% 
+  ggplot(aes(x=(Year+Year^2+Year^3+Year^4),y=Income)) + 
+  geom_point()+
+  stat_smooth(method="lm",formula = y ~ x + I(x^2)+I(x^3)+I(x^4),fill=NA)+
+  labs(title="Quartic")+
+  theme_minimal()
+
+#grid.arrange comes from the gridExtra package
+grid.arrange(lin,quad,cube,quar)
+```
+
+A quadratic transformation appears to make the relationship between Year and Income more linear.
+
+**Let's use the quadratic model**:
+
+First, we do a quadratic transformation
+
+```{r}
+df$Year_Sq <- df$Year^2
+```
+
+Now, let's run the regression equation
+
+```{r}
+quad <- lm(Income~Year+Year_Sq,data=df)
+summary(quad)
+```
+
+- We know that the quadratic term adds value because it is statistically significant.  What happens if we add a cubic term?
+
+```{r}
+df <- df %>% 
+  mutate(Year_Cube = Year^3)
+
+cube <- lm(Income~Year+Year_Sq+Year_Cube,data=df)
+summary(cube)
+```
+
+- Note how the cubic term was non-significant. Therefore, adding a cubic term did not add any value to the model, so we will stick with our quadratic term instead.
+
+**Interpretation**
+
+Interpreting these results is difficult. We can't really say "a ____ increase in X corresponds to a ___ unit increase in Y" because it depends on where we are in X.
+
+This is partially why we want to avoid using transformations if possible. If our goal was to just find a model that best fit the data without caring that much about why or wanting to *explain* the relationship between X and Y (like in machine learning), then it would be no problem; however, in the social sciences, we normally want to explain relationships so that we can understand human behavior and implement interventions to bring about change.
+  
+**For me, the easiest way to interpret is by graphing**
+
+```{r}
+df %>% 
+  ggplot(aes(x=Year,y=Income))+
+  geom_point(alpha=.05)+
+  stat_smooth(method="lm",formula = y ~ x + I(x^2),fill=NA)+
+  theme_minimal()
+```
+
+We could then say something descriptive to the effect of "...the relationship between Income and Year was non-linear, so we added a quadratic term to the model for the Year predictor variable ($\beta=5.0526, p<.001$). There was a quadratic relationship between Year and Income, such that salaries begin to increase more as you spend more time working for the same company."
+
+- I might then use the regression equation to compute estimated Income for several values of X, and use that to describe the relationship.
+
+$$\hat{y}=1.485-.416*x_1+5.0526*x_1^2$$
+
+```{r}
+1.4850-(0.4160*(2))+(5.0526*(2^2))
+1.4850-(0.4160*(4))+(5.0526*(4^2))
+1.4850-(0.4160*(6))+(5.0526*(6^2))
+```
+
+You could then add: "For example, someone with two years of experience makes, on average, \$20.86 an hour, while someone with four years of experience makes \$80.66 an hour and someone with six years of experience makes \$180.88 an hour (on average)."
+
+
