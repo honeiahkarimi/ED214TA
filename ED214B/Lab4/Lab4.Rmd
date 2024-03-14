@@ -1,0 +1,229 @@
+---
+title: 'Lab 4: Categorical and Continuous Predictors'
+author: 'ED 214B'
+date: 'Winter 2024'
+output: 
+  prettydoc::html_pretty:
+    theme: cayman
+    toc: yes
+---
+
+```{r setup, include=FALSE, message=FALSE, warning=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE)
+
+## Working Directory
+setwd("~/Desktop/ED214_TA_Materials/ED214B/Lab4")
+```
+
+## Introduction
+
+```{r}
+library(readxl) # import excel
+library(car) # levene's test
+library(psych) # describe
+library(tidyverse) # ggplot
+```
+
+### Research Question
+
+Does the place in which a person grows up impact their academic achievement?
+
+### Testable Hypotheses
+
+1. Is the type of location (urban/rural) a student grows up in related to their standardized math test scores?
+2. Is a student's family income and the type of location (urban/rural) the student grows up in related to their standardized math test scores?
+
+- Independent variables
+  - Type of location (Nominal)
+    - Variable: School_Locale
+    - 0: Urban
+    - 1: Rural
+  - Income (Continuous)
+    - Variable: Income
+
+- Dependent variable
+  - Math score (Continuous)
+    - Variable: X1MTSCOR
+
+### Read in the data
+
+```{r}
+Week3 <- read_excel("Week3_9999.xlsx")
+View(Week3)
+```
+
+## T-tests
+
+- Used when we have a categorical predictor and a continuous outcome
+
+**Review from last quarter**
+
+Levene's test is the test for equality of variances (homogeneity of variance). It assumes that the variances of the two groups are equal. If it is significant, it is violated.  When it is violated, we add `var.equal=FALSE` because it is a t-test that is corrected for this violation (and therefore does not assume equal variances across the two groups).
+
+#### The default in R is to assume that variances aren't equal
+
+```{r}
+#Recode missing
+Week3$X1MTSCOR[Week3$X1MTSCOR==9999] <- NA
+Week3$School_Locale[Week3$School_Locale==9999] <- NA
+```
+
+```{r}
+t.test(X1MTSCOR~School_Locale,data=Week3)
+#Default is var.equal=FALSE, so we don't need to add it
+```
+
+### To see the t-test results for when variances are assumed to be equal, add `var.equal=TRUE`
+```{r}
+t.test(Week3$X1MTSCOR~Week3$School_Locale, var.equal=TRUE)
+```
+
+### Run Levene's test to figure out which one to use
+```{r}
+#First, we need to tell R that School_Locale is a factor instead of numeric
+Week3$School_Locale<-as.factor(Week3$School_Locale)
+
+car::leveneTest(X1MTSCOR~School_Locale, data=Week3)
+```
+
+### Check Variable Type
+
+```{r}
+class(Week3$School_Locale)
+```
+
+### Standard Deviation for Each Group
+
+```{r}
+describeBy(Week3$X1MTSCOR,Week3$School_Locale)
+```
+
+### Interpretation
+
+An independent samples t-test was conducted to compare **math scores** with the **type of location** that a student grows up in.  There was a statistically significant difference in math scores for students who grew up in an urban area (M = 52.20, SD = 10.11) and students who grew up in a rural area (M = 50.44, SD = 9.75); t = 12.367, p < .001. We are 95% confident that the average mean difference in math scores between students who live in urban and rural areas falls between 1.48 and 2.04 points on the standardized math test.
+
+## Simple linear regression with one categorical predictor
+
+Let's replicate this test using a regression model!
+
+We're running the same model:
+
+$$\hat{y}={\beta_0}+{\beta_1}*{d_i}$$
+$$\hat{X1MTSCOR}={\beta_0}+{\beta_1}*{SchoolLocale_i}$$
+```{r}
+slr <- lm(X1MTSCOR~School_Locale,data=Week3)
+summary(slr)
+```
+
+The *t-statistic* tells us the likelihood that the regression coefficient found in our model is different from zero. The closer the T value is to 0, the less likely there is a significant difference. You must look at the p-value next to it to get the full picture.
+
+### Confidence Intervals
+
+```{r}
+confint(slr)
+```
+
+### ANOVA
+
+```{r}
+anova(slr)
+```
+
+Let's plug the values into the equation:
+
+$$\hat{X1MTSCOR}=52.20-1.76*{SchoolLocale_i}$$
+
+Where School_locale can take on a value of 0 (Urban) or 1 (Rural).
+
+When School_locale = 0, we only have the intercept.  When School_locale = 1, the slope is "activated". Therefore, the slope is mean difference between the two groups!  *Same as the t-test above!*
+
+$$\hat{X1MTSCOR}=52.20-(1.76*0)=52.20$$
+
+$$\hat{X1MTSCOR}=52.20-(1.76*1)=50.44$$
+
+Note that the confidence intervals are virtually the same between the two (the regression equation doesn't correct for the violation of homogeneity of variance, but it doesn't change our interpretation with a sample size this large, anyway).  
+
+### Interpretation
+
+Using a regression model, we found that the **type of location** that a student grows up in was a significant predictor of their **math scores** ($p$<.001, ${R^2}$=.008).  On average, students in rural areas had lower scores than students in urban areas ($\beta$=-1.76, $p$ < .001). We are 95% confident that the true difference between students in urban and rural scores falls between -2.04 and -1.48 points on a standardized math test.
+
+The reason the confidence interval is negative here and not in the t-test is that if you look at the regression model, it is because it chose rural (1) since it activated the slope! So, because rural's mean is lower than urban's mean, it is negative. Hope that makes sense!
+
+## Multiple Linear Regression
+
+Finally, let's answer the second part of our research question: what happens when we control for family income?
+
+We're running a new model:
+
+$$\hat{y}={\beta_0}+{\beta_1}*{d_i}+{\beta_2}*{X_i}$$
+
+$$\hat{X1MTSCOR}={\beta_0}+{\beta_1}*{SchoolLocale_i}+{\beta_2}*{Income_i}$$
+
+```{r}
+#First, recode missing
+Week3$Income[Week3$Income==9999] <- NA
+
+mlr <- lm(X1MTSCOR~School_Locale+Income,data=Week3)
+summary(mlr)
+```
+
+### Confidence Intervals
+
+```{r}
+confint(mlr)
+```
+
+### ANOVA
+
+- $H_0$: All group means are equal.
+- $H_a$: At least one group mean is different from the rest.
+
+```{r}
+anova(mlr)
+```
+
+The F-statistic determines the ratio of explained variance to unexplained variance. A greater F-statistic means there is more evidence that there is a difference between the group means.
+
+### Interpretation
+
+Using a regression model, we found that the **type of location** that a student grows up in and their family's **income** were significant predictors of their **math scores** ($p$<.001, ${R^2}$=.19).  Controlling for family income, students in rural areas had (on average) lower scores than students in urban areas ($\beta$=-.69, $p$ < .001).  Controlling for **type of location**, a one-unit increase in **income** corresponds to a .0005480 unit increase in **math scores** ($\beta$=.0005480, $p$ < .001).
+
+*Note*: The effect of income on math scores seems non-existent, but this is just because the scale of the income variable is much larger than the scale of the math score variable. If we run descriptives, we see:
+
+```{r}
+describe(Week3$Income)
+describe(Week3$X1MTSCOR)
+```
+
+We can make the equation easier to understand by simply multiplying Income by 10,000.
+
+```{r}
+.0005480*10000
+```
+
+Thus, we can say: "Controlling for **type of location**, a \$10,000 increase in **income** is associated with an increase of 5.48 points on math test scores ($\beta$=.0005480, $p$ < .001)."
+
+### Plotting the Regression Lines from the MLR
+
+```{r}
+Week3 %>% 
+  na.omit() %>% 
+  ggplot(aes(y=X1MTSCOR,x=Income))+
+  geom_point(alpha=0)+
+  geom_smooth(aes(colour=School_Locale),method="lm",fill=NA)+
+  theme_classic()+
+  scale_colour_discrete(name="School Locale",breaks=c("0","1"),labels=c("Urban","Rural"))
+```
+
+Let's figure out what all of this means...
+
+- `na.omit` = remove the missing values from the plot
+- `ggplot(aes(y=X1MTSCOR,x=Income))` = set the aesthetics (x and y) for the main graph
+- `geom_point()` = tell ggplot that we want a scatterplot
+- `alpha=0` = set the transparency to 100% (aka, hide the data)
+- `geom_smooth(method="lm")` = add a regression line to the graph
+- `aes(colour=School_Locale)` = set the aesthetics of the regression lines so that there is a different line for each group, each with a different color
+- `fill=NA` = hide the default standard error lines 
+- `theme_classic()` = make the graph simple with a white background and no gridlines
+- `scale_colour_discrete` = re-label legend
+  - for more info, see: http://www.cookbook-r.com/Graphs/Legends_(ggplot2)/

@@ -1,0 +1,285 @@
+---
+title: "Lab 8: Model Building and Diagnostics"
+author: "ED 214B"
+date: "Winter 2024"
+output: 
+  html_document:
+    theme: journal
+    toc: yes
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message=FALSE, warning=FALSE)
+
+#wd
+setwd("~/Desktop/ED214_TA_Materials/ED214B/Lab8")
+```
+
+**Congrats! You've made it to the last lab of the quarter! :)**
+
+1. Install packages
+
+```{r}
+pacman::p_load(readr, car, MASS, knitr, jtools)
+```
+
+2. Read in the dataset
+
+```{r}
+Lab8 <- read_csv("Lab8.csv")
+```
+
+## Our research question
+
+Of the variables in this dataset, which are the strongest predictors of achievement on a Physics exam?
+
+- `Teacher`: How much the student likes their Physics teacher
+- `SchlSat`: School Satisfaction Survey Score
+- `Extra`: Hours spent on extracurricular activities
+- `Math`: Math Test Score
+- `Class`: How much the student enjoys Physics class
+
+## Data Screening
+
+We're using a linear regression model, so let's check the assumptions that apply:
+
+1. **Linearity** of relationship between the outcome variable and each predictor
+2. **Multicollinearity** (predictors are not too highly correlated with each other; correlations between predictors that are .90 or over are usually considered collinear)
+3. **Normality** (especially of residuals)
+4. **Homoscedasticity** (residuals vs. predicted values)
+
+
+Assumptions we can't check as easily (if at all):
+
+5. **Independence** of observations (in this case, students didn't cheat off of each other)
+6. **No missing variables** that are important in predicting the outcome
+
+### Linearity
+
+*Correlations are biased unless you've established that there is a linear relationship between the variables*
+
+Plot the relationship between the IVs and the DV using a scatterplot.
+
+- Matrix Scatterplot
+  - This is the easiest way to compare all variables to each other
+  
+We'll use the pairs function from base R. If we want to plot the correlation between all variables, you can just enter the name of the dataset (this might throw an error if there are any categorical or factor variables):
+
+```{r out.width="100%"}
+pairs(Lab8)
+```
+
+We can also make the dots more transparent. In ggplot, we would do this using the `alpha` command. We can do something similar here:
+
+```{r out.width="100%"}
+pairs(Lab8,col=rgb(0,0,0,alpha=.05))
+```
+
+If we only want a few variables, or if we want to be able to zoom out the graph a little, we can list fewer variables:
+
+```{r}
+pairs(~Physics+Teacher+SchlSat,data=Lab8)
+```
+
+Or we can just run a basic scatterplot in Base R (see below), or use `geom_point` in `ggplot2`.  
+
+**We want to make sure that there isn't some sort of curvilinear relationship.**.
+
+```{r}
+plot(Lab8$Teacher,Lab8$Physics)
+```
+
+### Multicollinearity
+
+Correlations between *predictors* that are .90 or over are usually considered collinear (variables may be redundant; i.e., they measure the same thing). We'll see what that means, later...
+
+- We can use Base R to get a correlation matrix of the whole dataset:
+
+```{r}
+round(cor(Lab8),3)
+```
+
+- We can see that `Math` and `Physics` correlate at .911, but this isn't an issue of multicollinearity because `Physics` is the outcome variable
+- We also see `Class` and `Teacher` correlate at .925 - this is likely a problem.
+
+- If we wanted to only do a correlation matrix between a few variables, we could subset the dataset so that it only includes the variables we want, and then run ```cor```.
+
+```{r}
+Lab8_Sub <- subset(Lab8,select=c(Physics:SchlSat))
+
+round(cor(Lab8_Sub),3)
+```
+
+### Normality
+
+Normality is a holistic decision across multiple tests/graphs/etc.  
+
+- I like the `car` package for QQPlots, although there are others you can use.
+
+- We could do all of these individually, e.g.,:
+
+```{r}
+qqPlot(Lab8$Physics)
+qqPlot(Lab8$Teacher)
+#etc...
+```
+
+Or we could use `lapply` to apply the same function to every variable in the dataset. This is not necessary - I just want to show you all some R tricks!
+
+```{r out.width="50%", fig.align='default'}
+lapply(Lab8,qqPlot)
+```
+
+**Interpretation**: Our primary goal is to have the data line up with the diagonal line. If they do not, there might be a violation of normality. However, normality of the variables themselves in regression is not very important (the model is usually "robust" to violations). 
+
+We can also perform a Kolmogorov-Smirnov (K-S) normality test or a Shapiro-Wilk’s test. This is a Base R function:
+
+```{r}
+shapiro.test(Lab8$Physics)
+```
+
+Again, we could use `lapply`:
+
+```{r}
+lapply(Lab8,shapiro.test)
+```
+
+**Interpretation**: Non-Significant values mean the variable is likely normally distributed. Significant values are worth investigating (perhaps for transformation, if need be). However, again, many tests and models are “robust” to some non-normality of individual variables. 
+
+- We can see that `SchlSat` and `Extra` are Significant. Let's plot histograms to check. `SchlSat` didn't look too bad on the QQPlot (it seemed to be ordinal), but `Extra` didn't look great.
+
+
+```{r}
+hist(Lab8$SchlSat)
+```
+
+There doesn't seem to be an issue here. Let's check `Extra`:
+
+```{r}
+hist(Lab8$Extra)
+```
+
+- `Extra` is bimodal, so the normality assumption is violated.
+
+## Testing assumptions from a regression model
+
+Let's start by directly adding all predictors (like we normally do) and see what the model looks like, knowing that there are some abnormalities in our data.
+
+```{r}
+mod <- lm(Physics~Teacher+SchlSat+Extra+Math+Class,data=Lab8)
+summary(mod)
+```
+
+Not that the section at the top summarizes the residuals, aka the error between the prediction of the model and the actual results. Smaller residuals are better!
+
+### First, let's check for multicolllinearity
+
+*Remember that class and teacher were highly correlated.*
+
+We can use the `vif` function from the car package to check the variance inflation factor of each predictor (aka, a test for multicollinearity).  The VIF measures how much the variance of a regression coefficient is inflated due to multicollinearity in the model.
+
+```{r}
+car::vif(mod)
+```
+
+- **VIF** > 10 is normally seen as bad, although some would argue that VIF > 4 is enough to consider removing.  This gives an idea that Class and Teacher might be redundant with each other.  We also saw this with the correlations earlier.
+
+Let's check out the partial and semi-partial (or part) correlations:
+
+```{r}
+jtools::summ(mod,part.corr = T)
+```
+
+- Notice that the semi-partial (part) correlation between physics test scores and how much the student enjoys their physics class is almost 0 (.01). This is because it's highly correlated (>.9) with how much a student likes their physics teacher. Basically, these two things are closely related, and if you know the answer to one, you know the answer to the other. While the semi-partial correlation between how much the student likes their physics teacher and their physics score is low (.03), it's 3x greater than how much the student enjoys their physics class. Therefore, we can probably remove this variable, even though it's significant - it doesn't really add any additional information to the model.
+
+- It also looks like Extra doesn't have a strong relationship with the outcome for two reasons: (1) it is NS in the regression model, and (2) it has a very low semi-partial (part) correlation (e.g., the unique amount of variance that it explains in the outcome is very small). It also has the lowest partial correlation (i.e., the amount of variance leftover in the outcome that is still unexplained, after removing all of the variance explained by all of the other predictors).
+
+- **Partial plot interpretation**: What does the slope look like when controlling for all other variables?
+
+```{r out.width="80%", echo=FALSE}
+include_graphics("12.jpg")
+```
+
+### Back to assumption tests...
+
+We can use the plot function to test for heteroscedasticity of the errors:
+
+- Residuals vs Fitted: we want to see no relationship and a horizontal red line
+- QQ plot: we want to see a straight line
+- Scale-Location: we want to see no relationship, and a horizontal red line
+- Residuals vs Leverage: used to see which residuals are influencing the regression line
+
+```{r out.width="50%", fig.align='default'}
+plot(mod)
+```
+
+```{r}
+# you can try this too if you want
+# not significant means homoscesdasticity is not violated
+library(lmtest)
+bptest(mod)
+```
+
+- Plotting the normality of the residuals
+
+```{r}
+hist(mod$residuals)
+```
+
+- We can use the `cooks.distance` function from Base R to compute a Cook's D for each observation.
+- `rstudent` gives us the studentized deleted residuals for each observation.
+
+```{r}
+cd <- cooks.distance(mod)
+studres <- rstudent(mod)
+```
+
+We could then bind these to the dataset:
+
+```{r}
+Lab8$cd <- cd
+Lab8$studres <- studres
+```
+
+- **Cook's D**
+  - Used to identify outliers 
+  -  Calculated by removing the ith data point from the model and recalculating the regression. It summarizes how much all the values in the regression model change when the ith observation is removed. 
+  - Some say > 1, others say > $\frac{4}{n}$ or > $3*\mu_{Cook's D}$ are problems.
+    - Huge difference between these.
+  - If you have a lot of points with large $D_i$ values, that could indicate a problem with your regression model in general.
+
+- **Studentized deleted residuals** is the deleted residual divided by its estimated standard deviation. Studentized residuals are more effective for detecting outlying Y observations than standardized residuals.
+  - Remove the observation from the model, re-run the model, and compare the predicted value of $\hat{y}_i$ for that observation to the observed value of $y_i$. This tells us how "influential" that observation is, or how much it is "pulling the line" towards it. 
+  - This basically gives us the Z-score for a residual
+  - Want values less than +/-3
+
+- There are ways to print out which observations exceed these cutoffs, but we can also just click on the variable name in the dataset and sort ascending/descending.
+
+## Exploratory Model Building
+
+### Stepwise Regression
+
+```{r}
+stepwise <- stepAIC(mod,direction="both")
+stepwise
+summary(stepwise)
+```
+
+- What happened?
+  - Well ... nothing.  The stepwise regression model didn't remove anything, because this was already the model with the lowest AIC.
+
+- For pedagogical purposes ONLY, let's try this again with Extra as the outcome variable:
+  
+```{r}
+mod2 <- lm(Extra~Physics + Teacher + SchlSat + Math + Class,data=Lab8)
+summary(mod2)
+```
+
+Now, let's do stepwise regression:
+
+```{r}
+stepwise2 <- stepAIC(mod2,direction="both")
+summary(stepwise2)
+```
+
+- Stepwise regression found a model with a lower AIC by removing `Class` as a predictor. Notice that there are still NS variables in the model.

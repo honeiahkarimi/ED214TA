@@ -1,0 +1,244 @@
+---
+title: "Lab 3"
+author: "ED 214B"
+date: "Winter 2024"
+output: 
+  prettydoc::html_pretty:
+    theme: cayman
+    toc: yes
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE,
+                      out.width = "70%", fig.align = 'center')
+```
+
+### Working Directory
+
+```{r}
+setwd("~/Desktop/ED214_TA_Materials/ED214B/Lab3")
+```
+
+### Importing Libraries
+
+```{r}
+library(readxl) # import Excel document
+library(psych) # describe function
+library(summarytools) # freq function
+library(lmtest) # Breusch-Pagan test
+library(tidyverse) # ggplot and piping operator
+```
+
+### Importing Data
+
+```{r}
+df <- read_excel("week2d.xlsx")
+View(df)
+```
+
+## Research Question and Hypotheses
+
+Research question: Do students who enjoy reading and have greater school satisfaction tend to do better in school?
+
+Testable hypothesis: Does reading enjoyment (*enjoyread*) and school satisfaction (*schsat*) predict verbal test scores (*verbalscr*)?
+  
+## Data Cleaning
+
+```{r}
+describe(df$enjoyread)
+describe(df$schlsat)
+describe(df$verbalscr)
+```
+
+```{r}
+df %>% 
+  ggplot(aes(x=enjoyread))+
+  geom_histogram()+
+  theme_minimal()
+```
+
+### Recode Missing Data
+
+```{r}
+df$enjoyread[df$enjoyread==9999] <- NA
+df$schlsat[df$schlsat==9999] <- NA
+df$verbalscr[df$verbalscr==9999] <- NA
+```
+
+## Plot the Recoded Data
+
+```{r}
+df %>% 
+  ggplot(aes(x=enjoyread))+
+  geom_histogram()+
+  theme_minimal()
+```
+
+As we can see, **enjoyread** is ordinal. We'll treat this variable as continuous in the regression model (for now). We should look at the frequency table from ```summarytools``` instead of the descriptive statistics from the ```describe``` function in the ```psych``` package.
+
+```{r}
+freq(df$enjoyread)
+```
+
+We should plot **enjoyread** as a bar graph because it is ordinal.
+
+```{r}
+df %>% 
+  ggplot(aes(x=enjoyread))+
+  geom_bar()+
+  theme_minimal()
+
+df %>% 
+  ggplot(aes(x=schlsat))+
+  geom_histogram()+
+  theme_minimal()
+
+df %>% 
+  ggplot(aes(x=verbalscr))+
+  geom_histogram()+
+  theme_minimal()
+```
+
+## Simple Linear Regression
+
+```{r}
+mod_read <- lm(verbalscr~enjoyread,data=df)
+summary(mod_read)
+confint(mod_read)
+```
+
+```{r}
+mod_sch <- lm(verbalscr~schlsat,data=df)
+summary(mod_sch)
+confint(mod_sch)
+```
+
+### Model Summaries
+
+- enjoyread
+  - $\hat{y} = \beta_0 + \beta_1*enjoyread$
+  - $\hat{y} = 20.76 + 2.78*enjoyread$
+  - $R^2 = .58$
+  - 95% CI for enjoyread: (2.69, 2.86)
+    - *Doesn't contain 0*
+
+- schlsat
+  - $\hat{y} = \beta_0 + \beta_2*schlsat$
+  - $\hat{y} = 23.87 + .40*schlsat$
+  - $R^2 = .29$
+  - 95% CI for schlsat: (.38, .42)
+    - *Doesn't contain 0*
+  
+## Multiple Linear Regression
+
+```{r}
+mlr_mod <- lm(verbalscr~enjoyread+schlsat,data=df)
+summary(mlr_mod)
+```
+
+- Controlling for school satisfaction, reading enjoyment is significant (p < .001). 
+- Controlling for reading enjoyment, school satisfaction is significant (p < .001).
+
+The t-value in our MLR model is the coefficient divided by the standard error.
+
+```{r}
+2.568423 / 0.031584
+```
+
+### Confidence Intervals
+
+```{r}
+confint(mlr_mod)
+```
+
+- The interval has a 95% probability that it will contain the true value of $\beta_1$.
+
+### Model Summary
+
+- enjoyread
+  - $\hat{y} = \beta_0 + \beta_1*enjoyread + \beta_2*schlsat$
+  - $\hat{y} = 16.73 + 2.57*enjoyread + .34*schlsat$
+  - $R^2 = .77$
+  - 95% CI for enjoyread: (2.51, 2.63)
+    - *Doesn't contain 0*
+  - 95% CI for schlsat: (.32, .35)
+    - *Doesn't contain 0*
+  - A one unit increase in reading enjoyment is associated with a 2.57 unit difference in verbal test scores, controlling for school satisfaction.
+  - A one unit increase in school satisfaction is associated with a .34 unit difference in verbal test scores, controlling for reading enjoyment.
+  
+### Plot Each Relationship
+
+```{r}
+df %>% 
+  ggplot(aes(x=enjoyread,y=verbalscr))+
+  geom_point()+
+  theme_minimal()
+```
+
+```{r}
+df %>% 
+  ggplot(aes(x=schlsat,y=verbalscr))+
+  geom_point()+
+  theme_minimal()
+```
+
+## Diagnostic Plots for Homoscedasticity
+
+Remember that *homoscedasticity* means that you have the same scatter.
+
+- We want to see no relationship and a horizontal red line. This can be used to look at homoscedasticity.
+
+```{r}
+plot(mlr_mod, 1)
+plot(mlr_mod, 3)
+```
+
+We can see that the points have a pattern; thus, homoscedasticity is violated.
+
+### Breusch-Pagan Test
+
+We can also check homoscedasticity with the Breusch-Pagan Test. The null hypothesis for this test is that homoscedasticity is not violated.
+
+```{r}
+bptest(mlr_mod)
+```
+
+Our results are significant, which means we reject the null hypothesis. Homoscedasticity is indeed violated as we saw with our diagnostic plots.
+
+## Sum of Squares
+
+- The type of estimation that we normally use in regression to estimate the unknown parameters (i.e., the slope and the intercept) is "ordinary least squares".
+- The goal of "ordinary least squares" is to find a linear line that minimizes the "sums of squares" of the differences between the predicted outcome values ($\hat{y}$) and the observed outcome value ($y$).  
+
+- What are the sums of squares?
+
+- Sum of squares are the sum of **squared residuals**
+  - We have to square them because there are some positive and some negative residuals, so if we don't square them, they'll cancel out to 0. This gives us an idea of the magnitude of the amount of error in the model.
+
+- How do we interpret this number? We have to compare it to the amount of variance that the predictor(s) explain in the outcome variable. In other words, we want to maximize the amount of variance that can be explained, and minimize the the variance that cannot be explained.
+
+### ANOVA
+
+```{r}
+anova(mlr_mod)
+```
+
+- In the ANOVA table, we see that the residual sum of squares is 7,157.3. Let's replicate that.
+
+### Sum and Square the Residuals
+
+```{r}
+sum(mlr_mod$residuals^2)
+```
+
+- For review, $R^2$ comes from the sums of squares.
+
+$$R^2 = \frac{SS_{regression}}{SS_{total}}$$
+
+- $SS_{regression} = 18346.5 + 6197 = 24543.5$ 
+
+- $SS_{total} = SS_{regression} + SS_{residual} = 24543.5 + 7157.3 = 31700.8$
+
+- $R^2 = \frac{SS_{regression}}{SS_{total}} = .7742$
+
+
